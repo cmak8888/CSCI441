@@ -5,10 +5,10 @@
  *  File: main.cpp
  *
  *	Author: Dr. Jeffrey Paone - Fall 2015
- *	Modified: Dr. Jeffrey Paone - Fall 2017 for GLFW
+ *	Modified: Calvin Mak - Fall 2017 for GLFW
  *
  *  Description:
- *      Contains the base code for a basic flight simulator.
+ *      Working with 3d Graphics
  *
  */
 
@@ -74,7 +74,8 @@ float getRand() { return rand() / (float)RAND_MAX; }
 ////////////////////////////////////////////////////////////////////////////////
 void recomputeOrientation() {
 	// TODO #5: Convert spherical coordinates into a cartesian vector
-	
+	float normalize = sqrt(pow((camPos.x),2) + pow((camPos.y),2) + pow((camPos.x),2));
+    camDir = glm::vec3(sin(cameraTheta)*sin(cameraPhi)/normalize,-cos(cameraPhi)/normalize + 5, -cos(cameraTheta)*sin(cameraPhi)/normalize);
 
 	// and NORMALIZE this directional vector!!!
 
@@ -97,12 +98,40 @@ static void error_callback( int error, const char* description ) {
 }
 
 static void keyboard_callback( GLFWwindow *window, int key, int scancode, int action, int mods ) {
+    float radius = sqrt(pow((camPos.x),2) + pow((camPos.y),2) + pow((camPos.z),2));
 	if( action == GLFW_PRESS ) {
 		switch( key ) {
 			case GLFW_KEY_ESCAPE:
+
 			case GLFW_KEY_Q:
 				exit(EXIT_SUCCESS);
+				break;
+		    case GLFW_KEY_W:
+		        radius += 5.;
+		        camPos = glm::vec3(sin(cameraTheta)*sin(cameraPhi)*radius,-cos(cameraPhi)*radius, -cos(cameraTheta)*sin(cameraPhi)*radius);
+		        recomputeOrientation();
+		        break;
+            case GLFW_KEY_S:
+                radius -= 5.;
+                camPos = glm::vec3(sin(cameraTheta)*sin(cameraPhi)*radius,-cos(cameraPhi)*radius, -cos(cameraTheta)*sin(cameraPhi)*radius);
+                recomputeOrientation();
+                break;
 		}
+	} else if (action == GLFW_REPEAT) {
+        switch(key) {
+            case GLFW_KEY_W:
+                radius += 8.;
+                camPos = glm::vec3(sin(cameraTheta) * sin(cameraPhi) * radius, -cos(cameraPhi) * radius,
+                                   -cos(cameraTheta) * sin(cameraPhi) * radius);
+                recomputeOrientation();
+                break;
+            case GLFW_KEY_S:
+                radius -= 8.;
+                camPos = glm::vec3(sin(cameraTheta) * sin(cameraPhi) * radius, -cos(cameraPhi) * radius,
+                                   -cos(cameraTheta) * sin(cameraPhi) * radius);
+                recomputeOrientation();
+                break;
+        }
 	}
 }
 
@@ -117,6 +146,10 @@ static void keyboard_callback( GLFWwindow *window, int key, int scancode, int ac
 ////////////////////////////////////////////////////////////////////////////////
 static void cursor_callback( GLFWwindow *window, double x, double y ) {
 	if( leftMouseButton == GLFW_PRESS ) {
+	    cameraTheta = (x - mousePos.x) * 0.005;
+        if ((y - mousePos.y) * 0.005 >= 0 && (y - mousePos.y) * 0.005  <= M_PI) {
+            cameraPhi = (y - mousePos.y) * -0.005;
+        }
 		recomputeOrientation();     // update camera (x,y,z) based on (theta,phi)
 	}
 
@@ -156,7 +189,20 @@ void drawGrid() {
 	glDisable( GL_LIGHTING );
 
 	/** TODO #3: DRAW A GRID IN THE XZ-PLANE USING GL_LINES **/
+    for(int i = -50; i <= 50; i++) {
+        for(int j = -50; j <= 50; j++) {
+            glBegin(GL_LINES);
+            {
+                glColor4f(1.0f,1.0f,1.0f,1.0f);
+                glVertex3f(i, 0.0f, j);
+                glVertex3f(j, 0.0f, i);
 
+                glVertex3f(i, 0.0f, -j);
+                glVertex3f(j, 0.0f, -i);
+            }
+            glEnd();
+        }
+    }
 	/*
      *	As noted above, we are done drawing with OpenGL Primitives, so we
      *	must turn lighting back on.
@@ -171,7 +217,22 @@ void drawGrid() {
 ////////////////////////////////////////////////////////////////////////////////
 void drawCity() {
 	// TODO #4: Randomly place buildings of varying heights with random colors
-
+    for(int i = -50; i <= 50; i++) {
+        for(int j = -50; j <= 50; j++) {
+            if (i % 2 == 0 && j % 2 == 0) {
+                if (getRand() < 0.4)
+                {
+                    glColor4f(getRand(), getRand(), getRand(), 1.0f);
+                    float y = rand() % 10 + 1.;
+                    glm::mat4 transMtx = glm::translate(glm::mat4(1.0f), glm::vec3(i,y/2,j));
+                    transMtx = glm::scale(transMtx, glm::vec3(1.0f,y , 1.0f));
+                    glMultMatrixf(&transMtx[0][0]);
+                    CSCI441::drawSolidCube(1);
+                    glMultMatrixf(&(glm::inverse(transMtx))[0][0]);
+                }
+            }
+        }
+    }
 }
 
 // generateEnvironmentDL() /////////////////////////////////////////////////////
@@ -186,7 +247,12 @@ void drawCity() {
 ////////////////////////////////////////////////////////////////////////////////
 void generateEnvironmentDL() {
 	// TODO #1 Create a Display List & Call our Drawing Functions
-
+    environmentDL = glGenLists(1);
+    glNewList(environmentDL, GL_COMPILE);
+    {
+        drawGrid();
+        drawCity();
+    } glEndList();
 }
 
 //
@@ -196,7 +262,7 @@ void generateEnvironmentDL() {
 //
 void renderScene(void)  {
 	// TODO #2: REMOVE TEAPOT & CREATE A CITY SCENE ON A GRID...but call it's display list!
-	CSCI441::drawSolidTeapot( 2 );
+    glCallList(environmentDL);
 }
 
 //*************************************************************************************
@@ -352,7 +418,7 @@ int main( int argc, char *argv[] ) {
 
 		// set up our look at matrix to position our camera
 		// TODO #6: Change how our lookAt matrix gets constructed
-		glm::mat4 viewMtx = glm::lookAt( glm::vec3( 10, 10, 10 ),		// camera is located at (10, 10, 10)
+		glm::mat4 viewMtx = glm::lookAt( camDir,		                // camera is located at (10, 10, 10)
 										 glm::vec3(  0,  0,  0 ),		// camera is looking at (0, 0, 0,)
 										 glm::vec3(  0,  1,  0 ) );		// up vector is (0, 1, 0) - positive Y
 		// multiply by the look at matrix - this is the same as our view martix

@@ -4,7 +4,7 @@
  *  Project: lab03
  *  File: main.cpp
  *
- *	Author: Dr. Jeffrey Paone - Fall 2015
+ *	Author: Calvin Mak
  *
  *  Description:
  *      Contains the base code for 3D Bezier Curve visualizer.
@@ -34,6 +34,7 @@
 #include <time.h>			  // for time() functionality
 
 #include <fstream>			// for file I/O
+#include <iostream>
 #include <vector>				// for vector
 using namespace std;
 
@@ -55,7 +56,9 @@ glm::vec3 camDir; 			                    // camera DIRECTION in cartesian coordi
 
 vector<glm::vec3> controlPoints;
 float trackPointVal = 0.0f;
+float resolution = 10000;
 int numSegments = 0;
+int numPoints = 0;
 
 //*************************************************************************************
 //
@@ -70,6 +73,21 @@ int numSegments = 0;
 bool loadControlPoints( char* filename ) {
 	// TODO #02: read in control points from file.  Make sure the file can be
 	// opened and handle it appropriately.  return false if there is an error
+	ifstream inputFile(filename);
+    if(inputFile.fail()) {
+        return false;
+    }
+
+    inputFile >> numPoints;
+
+    string x, y, z;
+	for(int i = 0; i < numPoints; i++) {
+        getline(inputFile, x, ',');
+        getline(inputFile, y, ',');
+        getline(inputFile, z);
+        //cout << x << y << z;
+        controlPoints.push_back(glm::vec3(stoi(x), stoi(y), stoi(z)));
+	}
 
 	return true;
 }
@@ -99,7 +117,12 @@ glm::vec3 evaluateBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::ve
 	glm::vec3 point(0,0,0);
 
 	// TODO #06: Compute a point along a Bezier curve
-
+    point.x = pow((1.0f - t), 3) * p0.x + pow((1.0f - t), 2) * p1.x * 3.0f * t + (1.0f - t) * (pow(t, 2)) * 3.0 * p2.x +
+              pow(t, 3) * p3.x;
+    point.y = pow((1.0f - t), 3) * p0.y + pow((1.0f - t), 2) * p1.y * 3.0f * t + (1.0f - t) * (pow(t, 2)) * 3.0 * p2.y +
+              pow(t, 3) * p3.y;
+    point.z = pow((1.0f - t), 3) * p0.z + pow((1.0f - t), 2) * p1.z * 3.0f * t + (1.0f - t) * (pow(t, 2)) * 3.0 * p2.z +
+              pow(t, 3) * p3.z;
 	return point;
 }
 
@@ -111,6 +134,21 @@ glm::vec3 evaluateBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::ve
 ////////////////////////////////////////////////////////////////////////////////
 void renderBezierCurve( glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, int resolution ) {
     // TODO #05: Draw the Bezier Curve!
+
+
+    glm::vec3 point;
+    glBegin(GL_LINE_STRIP); {
+        glLineWidth(3.0f);
+        glColor4f(0.0f, 0.0f,1.0f,1.0f);
+        //cout << resolution << endl;
+        for(float t = 0.0000000; t <= 1.00; t = t + float(1.000f/resolution)) {
+            //if (t == 1) {cout << "t = " << t;}
+            point = evaluateBezierCurve(p0,p1,p2,p3,t);
+            //cout << point.x<<point.y<<point.z<<endl;
+            glVertex3f(point.x, point.y, point.z);
+        }
+
+    }glEnd();
 }
 
 //*************************************************************************************
@@ -242,12 +280,37 @@ void drawGrid() {
 void renderScene(void)  {
 
 	drawGrid();				// first draw our grid
-
+    glm::mat4 transMtx;
 	// TODO #03: Draw our control points
-
+    glDisable(GL_LIGHTING);
+    for(auto i : controlPoints) {
+        transMtx = glm::translate(glm::mat4(1.0f), i);
+        glMultMatrixf(&transMtx[0][0]);
+        glColor4f(0,1.0f,0,1.0f);
+        CSCI441::drawSolidSphere(0.5,100,100);
+        glMultMatrixf(&(inverse(transMtx))[0][0]);
+    }
 	// TODO #04: Connect our control points
+	glBegin(GL_LINE_STRIP);
+    {
+        glLineWidth(3.0f);
+        glColor4f(1.0f,1.0f,0,1.0f);
+        for (auto i: controlPoints) {
+            glVertex3f(i.x,i.y,i.z);
+        }
+    } glEnd();
 
 	// TODO #05: Draw the Bezier Curve!
+	float t = resolution;
+	int i = 0;
+   for (int i = 0; (i + 3) < numPoints; i += 3) {
+        glm::vec3 vec = controlPoints[i];
+        glm::vec3 vec2 = controlPoints[i + 1];
+        glm::vec3 vec33 = controlPoints[i + 2];
+        glm::vec3 vec44 = controlPoints[i + 3];
+        renderBezierCurve(vec, vec2, vec33, vec44, t);
+    }
+   glEnable(GL_LIGHTING);
 }
 
 //*************************************************************************************
@@ -380,7 +443,15 @@ int main( int argc, char *argv[] ) {
 	fprintf(stdout, "[INFO]: \\--------------------------------------------------------/\n");
 
 	// TODO #01: prompt user to enter a file name.  Then read the points from file
+    char* fileName = (char*) malloc(256);
+	fprintf(stdout, "Input a File name: \n");
+    cin >> fileName;
+    while (!loadControlPoints(fileName)) {
+        fprintf(stdout, "Invalid Filename, please input an existing filename: \n");
+        cin >> fileName;
+    }
 
+    delete fileName;
 	//  This is our draw loop - all rendering is done here.  We use a loop to keep the window open
 	//	until the user decides to close the window and quit the program.  Without a loop, the
 	//	window will display once and then the program exits.
